@@ -87,6 +87,11 @@ impl<T: ?Sized> Model<T>
         self
     }
 
+    pub fn clear(mut self) {
+        self.c.clear();
+        self.v.clear();
+    }
+
     fn expand_cluster(
         &mut self,
         population: &[&T],
