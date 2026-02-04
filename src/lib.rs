@@ -87,7 +87,7 @@ impl<T: ?Sized> Model<T>
         self
     }
 
-    pub fn clear(mut self) {
+    pub fn clear(&mut self) {
         self.c.clear();
         self.v.clear();
     }
