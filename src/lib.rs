@@ -48,8 +48,8 @@ pub enum Classification {
 /// # Arguments
 /// * `eps` - maximum distance between datapoints within a cluster
 /// * `min_points` - minimum number of datapoints to make a cluster
-/// * `input` - a Vec<Vec<f64>> of datapoints, organized by row
-pub fn cluster<T>(eps: f64, min_points: usize, input: &Vec<Vec<T>>) -> Vec<Classification>
+/// * `input` - datapoints organized by row (each row is a slice of coordinates)
+pub fn cluster<T>(eps: f64, min_points: usize, input: &[&[T]]) -> Vec<Classification>
 where
     T: Copy,
     f64: From<T>,
@@ -102,17 +102,17 @@ where
 
     fn expand_cluster(
         &mut self,
-        population: &[Vec<T>],
+        population: &[&[T]],
         queue: &mut Vec<usize>,
         cluster: usize,
-    ) -> bool {
-        let mut new_cluster = false;
-        while let Some(ind) = queue.pop() {
-            let neighbors = self.range_query(&population[ind], population);
-            if neighbors.len() < self.mpt {
-                continue;
-            }
-            new_cluster = true;
+	    ) -> bool {
+	        let mut new_cluster = false;
+	        while let Some(ind) = queue.pop() {
+	            let neighbors = self.range_query(population[ind], population);
+	            if neighbors.len() < self.mpt {
+	                continue;
+	            }
+	            new_cluster = true;
             self.c[ind] = Core(cluster);
             for n_idx in neighbors {
                 // n_idx is at least an edge point
@@ -132,11 +132,11 @@ where
     }
 
     #[inline]
-    fn range_query(&self, sample: &[T], population: &[Vec<T>]) -> Vec<usize> {
+    fn range_query(&self, sample: &[T], population: &[&[T]]) -> Vec<usize> {
         population
             .iter()
             .enumerate()
-            .filter(|(_, pt)| (self.distance)(sample, pt) < self.eps)
+            .filter(|(_, pt)| (self.distance)(sample, *pt) < self.eps)
             .map(|(idx, _)| idx)
             .collect()
     }
@@ -147,7 +147,7 @@ where
     /// corresponds to a row in the input matrix.
     ///
     /// # Arguments
-    /// * `population` - a matrix of datapoints, organized by rows
+    /// * `population` - datapoints organized by row (each row is a slice of coordinates)
     ///
     /// # Example
     ///
@@ -156,15 +156,15 @@ where
     /// use dbscan::Model;
     ///
     /// let model = Model::new(1.0, 3);
-    /// let inputs = vec![
-    ///     vec![1.5, 2.2],
-    ///     vec![1.0, 1.1],
-    ///     vec![1.2, 1.4],
-    ///     vec![0.8, 1.0],
-    ///     vec![3.7, 4.0],
-    ///     vec![3.9, 3.9],
-    ///     vec![3.6, 4.1],
-    ///     vec![10.0, 10.0],
+    /// let inputs: [&[f64]; 8] = [
+    ///     &[1.5, 2.2],
+    ///     &[1.0, 1.1],
+    ///     &[1.2, 1.4],
+    ///     &[0.8, 1.0],
+    ///     &[3.7, 4.0],
+    ///     &[3.9, 3.9],
+    ///     &[3.6, 4.1],
+    ///     &[10.0, 10.0],
     /// ];
     /// let output = model.run(&inputs);
     /// assert_eq!(
@@ -181,7 +181,7 @@ where
     ///     ]
     /// );
     /// ```
-    pub fn run(mut self, population: &Vec<Vec<T>>) -> Vec<Classification> {
+    pub fn run(mut self, population: &[&[T]]) -> Vec<Classification> {
         self.c = vec![Noise; population.len()];
         self.v = vec![false; population.len()];
 
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn cluster() {
         let model = Model::new(1.0, 3);
-        let inputs = vec![
+        let inputs_vec = vec![
             vec![1.5, 2.2],
             vec![1.0, 1.1],
             vec![1.2, 1.4],
@@ -222,6 +222,7 @@ mod tests {
             vec![3.6, 4.1],
             vec![10.0, 10.0],
         ];
+        let inputs: Vec<&[f64]> = inputs_vec.iter().map(|pt| pt.as_slice()).collect();
         let output = model.run(&inputs);
         assert_eq!(
             output,
@@ -241,7 +242,7 @@ mod tests {
     #[test]
     fn cluster_edge() {
         let model = Model::new(0.253110, 3);
-        let inputs = vec![
+        let inputs_vec = vec![
             vec![
                 0.3311755015020835,
                 0.20474852214361858,
@@ -271,6 +272,7 @@ mod tests {
                 0.04369949117030829,
             ],
         ];
+        let inputs: Vec<&[f64]> = inputs_vec.iter().map(|pt| pt.as_slice()).collect();
         let output = model.run(&inputs);
         assert_eq!(output, vec![Core(0), Core(0), Edge(0), Edge(0)]);
     }
@@ -278,7 +280,8 @@ mod tests {
     #[test]
     fn range_query() {
         let model = Model::new(1.0, 3);
-        let inputs = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs_vec = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs: Vec<&[f64]> = inputs_vec.iter().map(|pt| pt.as_slice()).collect();
         let neighbours = model.range_query(&[1.0, 1.0], &inputs);
 
         assert!(neighbours.len() == 2);
@@ -287,7 +290,8 @@ mod tests {
     #[test]
     fn range_query_small_eps() {
         let model = Model::new(0.01, 3);
-        let inputs = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs_vec = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs: Vec<&[f64]> = inputs_vec.iter().map(|pt| pt.as_slice()).collect();
         let neighbours = model.range_query(&[1.0, 1.0], &inputs);
 
         assert!(neighbours.len() == 1);
@@ -302,7 +306,8 @@ mod tests {
     #[test]
     fn range_query_custom_distance() {
         let model = Model::new(1.0, 3).set_distance_fn::<fn(&[f64], &[f64]) -> f64>(taxicab);
-        let inputs = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs_vec = vec![vec![1.0, 1.0], vec![1.1, 1.9], vec![3.0, 3.0]];
+        let inputs: Vec<&[f64]> = inputs_vec.iter().map(|pt| pt.as_slice()).collect();
         let neighbours = model.range_query(&[1.0, 1.0], &inputs);
         assert_eq!(neighbours.len(), 1)
     }
