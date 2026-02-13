@@ -28,16 +28,17 @@ pub enum Classification {
 
 /// DBSCAN parameters
 pub struct Model<T: ?Sized> {
-    range_query: fn(usize, &[&T], f64) -> Vec<usize>,
+    range_query: fn(out: &mut Vec<usize>, idx: usize, population: &[&T], eps: f64),
     pub min_cluster_points: usize,
     pub max_distance: f64,
     c: Vec<Classification>,
+    n: Vec<usize>,
     v: Vec<bool>,
 }
 
 impl<T: ?Sized> Model<T> {
-    pub fn new(range_query: fn(usize, &[&T], f64) -> Vec<usize>, max_distance: f64, min_cluster_points: usize) -> Model<T> {
-        Model { max_distance, min_cluster_points, c: Vec::new(/**/), v: Vec::new(/**/), range_query }
+    pub fn new(range_query: fn(out: &mut Vec<usize>, idx: usize, population: &[&T], eps: f64), max_distance: f64, min_cluster_points: usize) -> Model<T> {
+        Model { max_distance, min_cluster_points, c: Vec::new(/**/), n: Vec::new(/**/), v: Vec::new(/**/), range_query }
     }
 
     fn expand_cluster(
@@ -48,13 +49,14 @@ impl<T: ?Sized> Model<T> {
 	    ) -> bool {
 	        let mut new_cluster = false;
 	        while let Some(ind) = queue.pop() {
-	            let neighbors = (self.range_query)(ind, population, self.max_distance);
-	            if neighbors.len() < self.min_cluster_points {
+                self.n.clear();
+	            (self.range_query)(&mut self.n, ind, population, self.max_distance);
+	            if self.n.len() < self.min_cluster_points {
 	                continue;
 	            }
 	            new_cluster = true;
                 self.c[ind] = Core(cluster);
-                for n_idx in neighbors {
+                for &n_idx in self.n.iter() {
                     // n_idx is at least an edge point
                     if self.c[n_idx] == Noise {
                         self.c[n_idx] = Edge(cluster);
@@ -119,14 +121,15 @@ mod tests {
     }
 
     #[inline]
-    pub fn euclidean_range_query(idx: usize, population: &[&[f64]], eps: f64) -> Vec<usize> {
+    pub fn euclidean_range_query(out: &mut Vec<usize>, idx: usize, population: &[&[f64]], eps: f64) {
         let sample = population[idx];
-        population
+        let result: Vec<_> = population
             .iter()
             .enumerate()
             .filter(|(_, pt)| euclidean_distance(sample, *pt) < eps)
             .map(|(idx, _)| idx)
-            .collect()
+            .collect();
+        out.extend(result);
     }
 
     #[test]
